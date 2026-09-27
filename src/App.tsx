@@ -1,158 +1,104 @@
+import { useEffect, useState } from "react";
 import "./styles.css";
-
-const project = {
-  "id": "hxwl-11",
-  "port": 5111,
-  "title": "眼科验光记录",
-  "subtitle": "视力、屈光参数与复查处方对比",
-  "stack": "React + Vite + TypeScript + CSS",
-  "theme": [
-    "#2563eb",
-    "#059669",
-    "#dc2626"
-  ],
-  "domain": "眼视光",
-  "users": [
-    "验光师",
-    "门店顾问",
-    "复查医生"
-  ],
-  "metrics": [
-    "近视进展",
-    "散光变化",
-    "复查提醒",
-    "处方数量"
-  ],
-  "filters": [
-    "儿童",
-    "成人",
-    "渐进片",
-    "角膜塑形镜"
-  ],
-  "fields": [
-    "裸眼视力",
-    "矫正视力",
-    "球镜",
-    "柱镜",
-    "轴位",
-    "瞳距",
-    "角膜曲率"
-  ],
-  "records": [
-    [
-      "Patient-032",
-      "儿童近视",
-      "复查",
-      "右眼-2.75DS，轴位180"
-    ],
-    [
-      "Patient-081",
-      "渐进片",
-      "初配",
-      "ADD +1.50，瞳高待确认"
-    ],
-    [
-      "Patient-144",
-      "散光",
-      "复查",
-      "柱镜变化0.50D"
-    ]
-  ]
-};
-
-const statusColors = ["status-ok", "status-watch", "status-danger"];
-
-function MetricCard({ label, value, index }: { label: string; value: string; index: number }) {
-  return (
-    <article className="metric-card">
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <i className={statusColors[index % statusColors.length]} />
-    </article>
-  );
-}
+import type { Role } from "./rules/fields";
+import {
+  ensureSeed,
+  loadAuth,
+  loadDraft,
+  loadFamily,
+  loadPrescription,
+  loadRole,
+  loadSubmissions,
+  saveAuth,
+  saveDraft,
+  saveFamily,
+  savePrescription,
+  saveRole,
+  saveSubmissions,
+  useStoredState,
+} from "./storage/repository";
+import { ParentConsole } from "./components/ParentConsole";
+import { NurseConsole } from "./components/NurseConsole";
 
 function App() {
-  const values = project.metrics.map((metric: string, index: number) => {
-    const base = [84, 12, 31, 7][index % 4];
-    return String(base + index * 3);
-  });
+  ensureSeed();
+
+  const [role, setRole] = useState<Role>(loadRole);
+  const [now, setNow] = useState<number>(() => Date.now());
+
+  const [auth, setAuth] = useStoredState("auth", loadAuth, saveAuth);
+  const [submissions, setSubmissions] = useStoredState("submissions", loadSubmissions, saveSubmissions);
+  const [draft, setDraft] = useStoredState("draft", loadDraft, saveDraft);
+  const [family, setFamily] = useStoredState("family", loadFamily, saveFamily);
+  const [prescription, setPrescription] = useStoredState("prescription", loadPrescription, savePrescription);
+
+  // 每秒刷新一次，驱动截止倒计时与“已截止/回传中”状态
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const switchRole = (next: Role) => {
+    setRole(next);
+    saveRole(next);
+  };
 
   return (
     <main className="app-shell">
       <section className="hero">
         <div>
-          <p className="eyebrow">{project.id} · port {project.port}</p>
-          <h1>{project.title}</h1>
-          <p className="subtitle">{project.subtitle}</p>
+          <p className="eyebrow">学校视力筛查 · 限期回传台</p>
+          <h1>授权范围内的视力回传</h1>
+          <p className="subtitle">
+            家长勾选允许校医填写的字段并设定截止时刻；校医只能提交左右眼裸眼视力与复查建议。越权字段与过期提交一律挡下且保留输入，家长撤回后新提交立即关闭，已接收记录仍可查阅；处方与家庭资料只对家长显示。
+          </p>
         </div>
         <div className="stack-card">
-          <span>技术栈</span>
-          <strong>{project.stack}</strong>
+          <span>当前身份</span>
+          <div className="role-switch" role="tablist" aria-label="角色切换">
+            <button
+              role="tab"
+              aria-selected={role === "parent"}
+              className={role === "parent" ? "active role-parent" : "role-parent"}
+              onClick={() => switchRole("parent")}
+            >
+              家长
+            </button>
+            <button
+              role="tab"
+              aria-selected={role === "nurse"}
+              className={role === "nurse" ? "active role-nurse" : "role-nurse"}
+              onClick={() => switchRole("nurse")}
+            >
+              校医
+            </button>
+          </div>
+          <strong>{role === "parent" ? "家长端：管理授权与隐私病历" : "校医端：按授权限期回传"}</strong>
+          <p className="persist-note">授权、草稿与记录保存在本机，重开页面仍然可见。</p>
         </div>
       </section>
 
-      <section className="metrics-grid">
-        {project.metrics.map((metric: string, index: number) => (
-          <MetricCard key={metric} label={metric} value={values[index]} index={index} />
-        ))}
-      </section>
-
-      <section className="workspace">
-        <aside className="panel narrow">
-          <h2>角色</h2>
-          <div className="chips">
-            {project.users.map((user: string) => (
-              <span key={user}>{user}</span>
-            ))}
-          </div>
-          <h2>筛选</h2>
-          <div className="chips muted">
-            {project.filters.map((filter: string) => (
-              <button key={filter}>{filter}</button>
-            ))}
-          </div>
-        </aside>
-
-        <section className="panel">
-          <div className="section-heading">
-            <div>
-              <p>{project.domain}</p>
-              <h2>记录字段</h2>
-            </div>
-            <button className="primary-action">新增记录</button>
-          </div>
-          <div className="field-grid">
-            {project.fields.map((field: string) => (
-              <label key={field}>
-                <span>{field}</span>
-                <input placeholder={"填写" + field} />
-              </label>
-            ))}
-          </div>
-        </section>
-      </section>
-
-      <section className="records panel">
-        <div className="section-heading">
-          <div>
-            <p>示例数据</p>
-            <h2>近期记录</h2>
-          </div>
-          <button>导出摘要</button>
-        </div>
-        <div className="record-list">
-          {project.records.map((record: string[], index: number) => (
-            <article key={record.join("-")} className="record-card">
-              <div className="record-index">{String(index + 1).padStart(2, "0")}</div>
-              <div>
-                <h3>{record[0]}</h3>
-                <p>{record.slice(1).join(" · ")}</p>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
+      {role === "parent" ? (
+        <ParentConsole
+          auth={auth}
+          setAuth={setAuth}
+          family={family}
+          setFamily={setFamily}
+          prescription={prescription}
+          setPrescription={setPrescription}
+          submissions={submissions}
+          now={now}
+        />
+      ) : (
+        <NurseConsole
+          auth={auth}
+          draft={draft}
+          setDraft={setDraft}
+          submissions={submissions}
+          setSubmissions={setSubmissions}
+          now={now}
+        />
+      )}
     </main>
   );
 }
